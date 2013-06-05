@@ -1,0 +1,119 @@
+#!/bin/bash
+#
+# Icinga SMS via HTTP
+
+# Here I am
+IPATH=/data/icinga/etc/scripts
+
+# we will log into this file
+LFILE=/data/icinga/var/smshttp.log
+
+#SMS server settings moved to config file
+. ${IPATH}/sms.config
+#SMSSERVER=xxxx.xxx.xx
+#SMSSENDER=xxxxx
+#SMSIP=xxx.xxx.xxx.xxx
+#SMSPORT=xxxxx
+#SMSUSER=xxx
+#SMSPW=xxxxxxxxxxxx
+
+##### end settings
+
+# random ID
+# NTYPE is this a HOST or SERVICE notification?
+if [ $ICINGA_SERVICENOTIFICATIONID -eq 0 ] ;then
+        NTYPE=HOST
+        IID=$ICINGA_HOSTNOTIFICATIONID
+else
+        NTYPE=SERVICE
+        IID=$ICINGA_SERVICENOTIFICATIONID
+fi
+
+EMSG="$(date) ERROR [$IID] $ICINGA_CONTACTNAME - "
+IMSG="$(date) INFO  [$IID] $ICINGA_CONTACTNAME - "
+
+# Function usage
+usage() {
+        echo "Usage: $0 [SMSOUTPUTFORMAT]"
+        exit 1
+}
+
+if [ "$NTYPE" = "HOST" ]; then
+	echo "$IMSG HOST: $ICINGA_HOSTNAME got $ICINGA_NOTIFICATIONTYPE $ICINGA_HOSTSTATE" >> $LFILE
+elif [ "$NTYPE" = "SERVICE" ]; then
+	echo "$IMSG SERVICE: $ICINGA_SERVICEDESC HOST: $ICINGA_HOSTNAME got $ICINGA_NOTIFICATIONTYPE $ICINGA_SERVICESTATE" >> $LFILE
+else
+	echo "$EMSG ntype ($NTYPE) wrong" >> $LFILE
+fi
+
+
+# Function to send a notification
+do_notify() {
+NT="$(date '+%d-%m-%Y %H:%M:%S')"
+if [ "$ICINGA__CONTACTINMOKS" != "" ] && ( [ "$ICINGA_NOTIFICATIONTYPE" = "RECOVERY" -o "$ICINGA_NOTIFICATIONTYPE" = "CUSTOM" ] );then
+	SMSSENDER=$ICINGA__CONTACTINMOKS
+elif [ "$ICINGA__CONTACTINMPRS" != "" ] && [ "$ICINGA_NOTIFICATIONTYPE" = "PROBLEM" ];then
+	SMSSENDER=$ICINGA__CONTACTINMPRS
+else
+	SMSSENDER=Icinga
+fi
+if [ "$NTYPE" = "HOST" ]; then
+	if [ -z $ICINGA_HOSTACKCOMMENT ]; then
+		NDATAS="$ICINGA_NOTIFICATIONTYPE $ICINGA_HOSTSTATE $ICINGA_HOSTNAME%0A%0AALARM: $ICINGA_SHORTDATETIME%0ASMS:   $NT%0A%0AHOST: $ICINGA_HOSTNAME%0AIP: $ICINGA_HOSTADDRESS%0A%0A---%0A%0AOUTPUT: $ICINGA_HOSTOUTPUT%0A%0AUNHANDLED HOSTS DOWN: $ICINGA_TOTALHOSTSDOWNUNHANDLED"
+	else
+		NDATAS="$ICINGA_NOTIFICATIONTYPE $ICINGA_HOSTSTATE $ICINGA_HOSTNAME%0A%0AACKCOMMENT: $ICINGA_HOSTACKCOMMENT%0A%0AALARM: $ICINGA_SHORTDATETIME%0ASMS    :   $NT%0A%0AHOST: $ICINGA_HOSTNAME%0AIP: $ICINGA_HOSTADDRESS%0A%0A---%0A%0AOUTPUT: $ICINGA_HOSTOUTPUT%0A%0AUNHANDLED HOSTS     DOWN: $ICINGA_TOTALHOSTSDOWNUNHANDLED"
+	fi
+	echo "$IMSG  NDATAS: ${NDATAS// /+}" >> $LFILE
+elif [ "$NTYPE" = "SERVICE" ]; then
+	if [ -z $ICINGA_SERVICEACKCOMMENT ]; then
+		NDATAS="$ICINGA_NOTIFICATIONTYPE $ICINGA_SERVICESTATE $ICINGA_HOSTNAME%0A%0AALARM: $ICINGA_SHORTDATETIME%0ASMS:   $NT%0A%0AHOST: $ICINGA_HOSTNAME%0AIP: $ICINGA_HOSTADDRESS%0A%0ASERVICE: $ICINGA_SERVICEDESC%0A%0AOUTPUT: $ICINGA_SERVICEOUTPUT%0A%0ACMD: $ICINGA_SERVICECHECKCOMMAND%0A%0AUNHANDLED CRITICAL SERVICES: $ICINGA_TOTALSERVICESCRITICALUNHANDLED"
+	else
+		NDATAS="$ICINGA_NOTIFICATIONTYPE $ICINGA_SERVICESTATE $ICINGA_HOSTNAME%0A%0AACKCOMMENT: $ICINGA_SERVICEACKCOMMENT%0A%0AALARM: $ICINGA_SHORTDATETIME%0ASMS:   $NT%0A%0AHOST: $ICINGA_HOSTNAME%0AIP: $ICINGA_HOSTADDRESS%0A%0ASERVICE: $ICINGA_SERVICEDESC%0A%0AOUTPUT: $ICINGA_SERVICEOUTPUT%0A%0ACMD: $ICINGA_SERVICECHECKCOMMAND%0A%0AUNHANDLED CRITICAL SERVICES: $ICINGA_TOTALSERVICESCRITICALUNHANDLED"
+	fi
+else
+	echo "$EMSG again the ntype ($NTYPE) might be set wrong" >> $LFILE
+	exit 1
+fi
+echo "$IMSG  starting curl to send sms from sernder $SMSSENDER" >> $LFILE
+if [ -z $ICINGA_CONTACTPAGER ]; then
+	echo "$EMSG no admin pager number was found - can not send any sms..." >> $LFILE
+else
+	CMD=$(/usr/bin/curl --fail "http://$SMSIP:$SMSPORT/cgi-bin/sendsms?username=$SMSUSER&password=$SMSPW&from=$SMSSENDER&to=$ICINGA_CONTACTPAGER&text=${NDATAS// /+}")
+	RT=$?
+	if [ $RT -gt 0 ]; then
+		echo "$EMSG curl return code was $RT OUTPUT: $CMD" >> $LFILE
+		echo "$IMSG  falling back to sms via email" >> $LFILE
+		do_emailsms
+		return 1
+	else
+		echo "$IMSG  curl return code was $RT OUTPUT: $CMD" >> $LFILE
+	fi
+fi
+echo "\n\n\n################ $(date) ####################\n" >> /var/tmp/smshttpenv.log
+env >> /var/tmp/smshttpenv.log
+}
+
+# Function to send a SMS via email
+do_emailsms() {
+echo "$IMSG  sending fallback sms via email" >> $LFILE
+if [ "$NTYPE" = "HOST" ]; then
+	/usr/bin/printf "%b" "$ICINGA_NOTIFICATIONTYPE $ICINGA_HOSTSTATE $ICINGA_HOSTNAME\n\nALARM: $ICINGA_SHORTDATETIME\nSMS: $NT\n\nHOST: $ICINGA_HOSTNAME\nIP: $ICINGA_HOSTADDRESS\n\n---\n\nOUTPUT: $ICINGA_HOSTOUTPUT" /usr/bin/mailx -s "$ICINGA_NOTIFICATIONTYPE $ICINGA_HOSTSTATE $ICINGA_HOSTNAME" $ICINGA_CONTACTPAGER@$SMSSERVER
+	RT=$?
+elif [ "$NTYPE" = "SERVICE" ]; then
+	/usr/bin/printf "%b" "$ICINGA_NOTIFICATIONTYPE $ICINGA_SERVICESTATE $ICINGA_HOSTNAME\n\nALARM: $ICINGA_SHORTDATETIME\nSMS: $NT\n\nHOST: $ICINGA_HOSTNAME\nIP: $ICINGA_HOSTADDRESS\n\nSERVICE: $ICINGA_SERVICEDESC\n\nOUTPUT: $ICINGA_SERVICEOUTPUT\n\nCMD: $ICINGA_SERVICECHECKCOMMAND" | /usr/bin/mailx -s "$ICINGA_NOTIFICATIONTYPE $ICINGA_SERVICESTATE $ICINGA_HOSTNAME" $ICINGA_CONTACTPAGER@$SMSSERVER
+	RT=$?
+else
+	RT=1
+	echo "$EMSG and ups - again the ntype ($NTYPE) might be set wrong" >> $LFILE
+fi
+if [ $RT -eq 0 ]; then
+	echo "$IMSG  email to sms gatway $SMSSERVER was sent successful" >> $LFILE
+else
+	echo "$EMSG email to sms gatway $SMSSERVER failed" >> $LFILE
+fi
+}
+
+
+do_notify
+
+#EOF
