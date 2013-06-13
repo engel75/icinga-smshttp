@@ -8,6 +8,9 @@ IPATH=/data/icinga/etc/scripts
 # we will log into this file
 LFILE=/data/icinga/var/smshttp.log
 
+ARGSTRING="$@"
+ARGNR=$#
+
 #SMS server settings moved to config file
 . ${IPATH}/sms.config
 #SMSSERVER=xxxx.xxx.xx
@@ -57,8 +60,8 @@ elif [ "$ICINGA__CONTACTINMPRS" != "" ] && [ "$ICINGA_NOTIFICATIONTYPE" = "PROBL
 else
 	SMSSENDER=Icinga
 fi
-if [ $# -ge 1 ]; then
-	NDATAS="$@"
+if [ $ARGNR -ge 1 ]; then
+	NDATAS="$ARGSTRING"
 else
 	if [ "$NTYPE" = "HOST" ]; then
 		if [ -z $ICINGA_NOTIFICATIONCOMMENT ]; then
