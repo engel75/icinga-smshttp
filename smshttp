@@ -24,7 +24,7 @@ ARGNR=$#
 
 # random ID
 # NTYPE is this a HOST or SERVICE notification?
-if [ $ICINGA_SERVICENOTIFICATIONID -eq 0 ] ;then
+if [ -z $ICINGA_SERVICESTATEID ] ;then
         NTYPE=HOST
         IID=$ICINGA_HOSTNOTIFICATIONID
 else
