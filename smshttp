@@ -88,7 +88,7 @@ elif [ -n $ICINGA_CONTACTPAGER ] && [ -n $ICINGA__SERVICESMSMAX ] && [ $ICINGA_S
 elif [ -n $ICINGA_CONTACTPAGER ] && [ -n $ICINGA__SERVICESMSMAX ] && [ $ICINGA_SERVICENOTIFICATIONNUMBER -eq $ICINGA__SERVICESMSMAX ]; then
 	NDATAS="***LAST SMS ($ICINGA_SERVICENOTIFICATIONNUMBER)***%0A$NDATAS"
 else
-	echo "$IMSG  starting curl to send sms from sernder $SMSSENDER to $ICINGA_CONTACTPAGER" >> $LFILE
+	echo "$IMSG  starting curl to send sms from sender $SMSSENDER to $ICINGA_CONTACTPAGER" >> $LFILE
 	CMD=$(/usr/bin/curl --fail "http://$SMSIP:$SMSPORT/cgi-bin/sendsms?username=$SMSUSER&password=$SMSPW&from=$SMSSENDER&to=$ICINGA_CONTACTPAGER&text=${NDATAS// /+}")
 	RT=$?
 	if [ $RT -gt 0 ]; then
