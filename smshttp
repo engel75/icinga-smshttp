@@ -85,9 +85,13 @@ if [ -z $ICINGA_CONTACTPAGER ]; then
 	echo "$EMSG no admin pager number was found - can not send any sms..." >> $LFILE
 elif [ -n $ICINGA_CONTACTPAGER ] && [ -n $ICINGA__SERVICESMSMAX ] && [ $ICINGA_SERVICENOTIFICATIONNUMBER -gt $ICINGA__SERVICESMSMAX ]; then
 	echo "$IMSG SMSMAX is set to $ICINGA__SERVICESMSMAX and this is SMS number $ICINGA_SERVICENOTIFICATIONNUMBER so no sms will be sent..." >> $LFILE
+elif [ -n $ICINGA_CONTACTPAGER ] && [ -n $ICINGA__HOSTSMSMAX ] && [ $ICINGA_HOSTNOTIFICATIONNUMBER -gt $ICINGA__HOSTSMSMAX ]; then
+	echo "$IMSG SMSMAX is set to $ICINGA__HOSTSMSMAX and this is SMS number $ICINGA_HOSTNOTIFICATIONNUMBER so no sms will be sent..." >> $LFILE
 else
 	if [ -n $ICINGA__SERVICESMSMAX ] && [ $ICINGA_SERVICENOTIFICATIONNUMBER -eq $ICINGA__SERVICESMSMAX ]; then
 		NDATAS="***LAST SMS ($ICINGA_SERVICENOTIFICATIONNUMBER)***%0A$NDATAS"
+	elif [ -n $ICINGA__HOSTSMSMAX ] && [ $ICINGA_HOSTNOTIFICATIONNUMBER -eq $ICINGA__HOSTSMSMAX ]; then
+		NDATAS="***LAST SMS ($ICINGA_HOSTNOTIFICATIONNUMBER)***%0A$NDATAS"
 	fi
 	echo "$IMSG  starting curl to send sms from sender $SMSSENDER to $ICINGA_CONTACTPAGER" >> $LFILE
 	CMD=$(/usr/bin/curl --fail "http://$SMSIP:$SMSPORT/cgi-bin/sendsms?username=$SMSUSER&password=$SMSPW&from=$SMSSENDER&to=$ICINGA_CONTACTPAGER&text=${NDATAS// /+}")
